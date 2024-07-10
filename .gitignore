@@ -1,0 +1,75 @@
+# Django-specific
+*.log
+*.pot
+*.pyc
+*.py[cod]
+__pycache__/
+local_settings.py
+db.sqlite3
+
+# Environment variables
+.env
+
+# SQLite database
+*.sqlite3
+
+# macOS
+.DS_Store
+
+# Vagrant
+.vagrant/
+Vagrantfile
+
+# Sphinx documentation
+docs/_build/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Translations
+*.mo
+*.pot
+
+# Static and media files
+staticfiles/
+media/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# VS Code
+.vscode/
+
+# JetBrains
+/shelf/
+/workspace.xml
+/httpRequests/
+/dataSources/
+/dataSources.local.xml
+.idea
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest
+.pytest_cache/
