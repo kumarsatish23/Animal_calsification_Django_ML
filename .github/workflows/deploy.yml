@@ -95,67 +95,143 @@ jobs:
         key: ${{ secrets.EC2_PRIVATE_KEY }}
         port: ${{ secrets.EC2_PORT || 22 }}
         script: |
+          set -e  # Exit on any error
+          
+          echo "🚀 Starting deployment process..."
+          
           # Update system packages
-          sudo apt-get update
+          echo "📦 Updating system packages..."
+          sudo apt-get update || { echo "❌ Failed to update packages"; exit 1; }
 
           # Install Docker if not present
           if ! command -v docker &> /dev/null; then
+            echo "🐳 Installing Docker..."
             curl -fsSL https://get.docker.com -o get-docker.sh
             sudo sh get-docker.sh
             sudo usermod -aG docker $USER
             sudo systemctl start docker
             sudo systemctl enable docker
+            echo "✅ Docker installed successfully"
+          else
+            echo "✅ Docker already installed"
           fi
 
           # Install Docker Compose if not present
           if ! command -v docker-compose &> /dev/null; then
+            echo "🔧 Installing Docker Compose..."
             sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
+            echo "✅ Docker Compose installed successfully"
+          else
+            echo "✅ Docker Compose already installed"
           fi
 
           # Create application directory
+          echo "📁 Setting up application directory..."
           sudo mkdir -p /opt/animal-classifier
           cd /opt/animal-classifier
 
-          # Download deployment files
-          sudo wget -O docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.prod.yml || echo "Production compose file not found, using default"
-          sudo wget -O .env.production https://raw.githubusercontent.com/${{ github.repository }}/main/.env.production || echo "Production env file not found"
+          # Create environment file
+          echo "⚙️ Setting up environment..."
+          sudo tee .env.production > /dev/null << EOF
+          DEBUG=0
+          SECRET_KEY=$(openssl rand -base64 32)
+          ALLOWED_HOSTS=*
+          DJANGO_SETTINGS_MODULE=dog_cat_classifier.settings
+          DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+          EOF
 
+          # Create production compose file
+          echo "📝 Creating production compose file..."
+          sudo tee docker-compose.prod.yml > /dev/null << 'EOF'
+          version: '3.8'
+          services:
+            web:
+              image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+              ports:
+                - "80:8000"
+              volumes:
+                - ./media:/app/media
+                - ./staticfiles:/app/staticfiles
+                - ./logs:/app/logs
+              environment:
+                - DEBUG=0
+                - DJANGO_SETTINGS_MODULE=dog_cat_classifier.settings
+                - ALLOWED_HOSTS=*
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000', timeout=10)"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+          EOF
+
+          # Create necessary directories
+          sudo mkdir -p media staticfiles logs
+          
           # Login to Docker Hub
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | sudo docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          echo "🔐 Logging into Docker Hub..."
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | sudo docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin || { echo "❌ Docker login failed"; exit 1; }
 
           # Stop existing containers
+          echo "🛑 Stopping existing containers..."
           sudo docker-compose -f docker-compose.prod.yml down || true
 
           # Pull latest image
-          sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          echo "📥 Pulling latest Docker image..."
+          sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest || { echo "❌ Failed to pull Docker image"; exit 1; }
 
           # Start new containers
-          sudo docker-compose -f docker-compose.prod.yml up -d
+          echo "🚀 Starting new containers..."
+          sudo docker-compose -f docker-compose.prod.yml up -d || { echo "❌ Failed to start containers"; exit 1; }
 
-          # Clean up unused images
-          sudo docker image prune -af
+          # Wait for container to be ready
+          echo "⏳ Waiting for containers to be ready..."
+          sleep 30
+
+          # Check if container is running
+          if ! sudo docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+            echo "❌ Container failed to start properly"
+            sudo docker-compose -f docker-compose.prod.yml logs
+            exit 1
+          fi
 
           # Run migrations
-          sudo docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate
+          echo "🔧 Running database migrations..."
+          sudo docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate || { echo "❌ Migration failed"; exit 1; }
 
           # Collect static files
-          sudo docker-compose -f docker-compose.prod.yml exec -T web python manage.py collectstatic --noinput
+          echo "📚 Collecting static files..."
+          sudo docker-compose -f docker-compose.prod.yml exec -T web python manage.py collectstatic --noinput || { echo "❌ Static files collection failed"; exit 1; }
 
-          echo "Deployment completed successfully!"
+          # Clean up unused images
+          echo "🧹 Cleaning up unused Docker images..."
+          sudo docker image prune -af
+
+          # Final status check
+          echo "📊 Final container status:"
+          sudo docker-compose -f docker-compose.prod.yml ps
+          
+          echo "✅ Deployment completed successfully!"
+          echo "🌐 Application should be accessible at http://$(curl -s http://checkip.amazonaws.com/)"
 
   notify:
     needs: [deploy]
     runs-on: ubuntu-latest
-    if: always()
+    if: always() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     
     steps:
-    - name: Notify deployment status
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    - name: Notify deployment success
+      if: needs.deploy.result == 'success'
       run: |
-        if [ "${{ needs.deploy.result }}" == "success" ]; then
-          echo "✅ Deployment to EC2 successful!"
-        else
-          echo "❌ Deployment to EC2 failed!"
-          exit 1
-        fi
+        echo "✅ Deployment to EC2 successful!"
+        echo "🌐 Application is now running on your EC2 instance"
+        
+    - name: Notify deployment failure
+      if: needs.deploy.result != 'success'
+      run: |
+        echo "❌ Deployment to EC2 failed!"
+        echo "🔍 Check the deployment logs for details"
+        echo "📋 Deploy job status: ${{ needs.deploy.result }}"
+        exit 1
