@@ -34,8 +34,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy project files
 COPY . .
 
-# Create media directory for file uploads
-RUN mkdir -p media
+# Create directories for file uploads and static files
+RUN mkdir -p media staticfiles
 
 # Collect static files
 RUN python manage.py collectstatic --noinput

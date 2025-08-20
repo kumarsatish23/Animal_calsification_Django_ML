@@ -7,7 +7,7 @@ services:
       - "80:8000"
     volumes:
       - ./media:/app/media
-      - ./static:/app/staticfiles
+      - ./staticfiles:/app/staticfiles
       - ./logs:/app/logs
     environment:
       - DEBUG=0
@@ -34,7 +34,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
-      - ./static:/var/www/static:ro
+      - ./staticfiles:/var/www/static:ro
       - ./media:/var/www/media:ro
     depends_on:
       - web
