@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  web:
+    image: ${DOCKERHUB_USERNAME}/animal-classifier:latest
+    ports:
+      - "80:8000"
+    volumes:
+      - ./media:/app/media
+      - ./static:/app/staticfiles
+      - ./logs:/app/logs
+    environment:
+      - DEBUG=0
+      - DJANGO_SETTINGS_MODULE=dog_cat_classifier.settings
+      - ALLOWED_HOSTS=*
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000', timeout=10)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./static:/var/www/static:ro
+      - ./media:/var/www/media:ro
+    depends_on:
+      - web
+    restart: unless-stopped
+    profiles:
+      - nginx
+
+networks:
+  default:
+    driver: bridge

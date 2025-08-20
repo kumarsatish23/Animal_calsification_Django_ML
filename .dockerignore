@@ -1,0 +1,54 @@
+# Virtual environment
+venv/
+env/
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Database
+*.sqlite3
+db.sqlite3
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Logs
+*.log
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Static files (will be collected during build)
+staticfiles/
+
+# Media files (if not needed in image)
+# media/
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# Other
+.env.example
+docker-compose.yml
